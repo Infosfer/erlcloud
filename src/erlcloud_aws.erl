@@ -5,7 +5,7 @@
          aws_request2/7,
          aws_request_xml2/5, aws_request_xml2/7,
          aws_request_form/8,
-         param_list/2, set_default_config/1, default_config/0, update_config/1, format_timestamp/1,
+         param_list/2, default_config/0, update_config/1, format_timestamp/1,
          http_headers_body/1,
          request_to_return/1,
          sign_v4/5]).
@@ -147,9 +147,6 @@ format_timestamp({{Yr, Mo, Da}, {H, M, S}}) ->
       io_lib:format("~4.10.0b-~2.10.0b-~2.10.0bT~2.10.0b:~2.10.0b:~2.10.0bZ",
                     [Yr, Mo, Da, H, M, S])).
 
-set_default_config(Config) ->
-    put(aws_config, Config).
-    
 default_config() ->
     case get(aws_config) of
         undefined ->
