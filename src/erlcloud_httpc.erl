@@ -16,11 +16,8 @@ request(URL, Method, Hdrs, Body, Timeout, _Config) ->
 
 	case hackney:request(Method, URL, Hdrs, Body, Options) of
 		{ok, StatusCode, _RespHeaders, ClientRef} ->
-			Temp = hackney:body(ClientRef),
-			erlang:display(Temp),
-			case Temp of
+			case hackney:body(ClientRef) of
 				{ok, ResultBody} ->
-					erlang:display(binary_to_list(ResultBody)), 
 					{ok, {{StatusCode, undefined}, undefined, ResultBody}};
 				{error, Reason} ->
 					{error, Reason}
