@@ -134,6 +134,11 @@
     delete_table_return/0,
     describe_table_return/0,
     expected_opt/0,
+    condition_expression_opt/0,
+    projection_expression_opt/0,
+    update_expression_opt/0,
+    expression_attribute_names_opt/0,
+    expression_attribute_values_opt/0,
     get_item_opt/0,
     get_item_opts/0,
     get_item_return/0,
@@ -145,6 +150,10 @@
     in_attr_data_set/0,
     in_attr_typed_value/0,
     in_attr_value/0,
+    in_condition_expression/0,
+    in_projection_expression/0,
+    in_update_expression/0,
+    in_expression_attribute_names/0,
     in_expected/0,
     in_expected_item/0,
     in_item/0,
@@ -222,7 +231,7 @@ default_config() -> erlcloud_aws:default_config().
 %%%------------------------------------------------------------------------------
 
 -type table_name() :: binary().
--type attr_type() :: s | n | b | ss | ns | bs.
+-type attr_type() :: bool | null | s | n | b | ss | ns | bs | m | l.
 -type attr_name() :: binary().
 -type maybe_list(T) :: T | [T].
 
@@ -234,6 +243,10 @@ default_config() -> erlcloud_aws:default_config().
 -type in_attr() :: {attr_name(), in_attr_value()}.
 -type in_expected_item() :: {attr_name(), false} | condition().
 -type in_expected() :: maybe_list(in_expected_item()).
+-type in_condition_expression() :: binary().
+-type in_projection_expression() :: binary().
+-type in_update_expression() :: binary().
+-type in_expression_attribute_names() :: {binary(), binary()}.
 -type in_item() :: [in_attr()].
 
 -type json_pair() :: {binary(), jsx:json_term()}.
@@ -243,6 +256,10 @@ default_config() -> erlcloud_aws:default_config().
 -type json_attr() :: {attr_name(), [json_attr_value()]}.
 -type json_item() :: [json_attr()].
 -type json_expected() :: [json_pair()].
+-type json_condition_expression() :: json_pair().
+-type json_projection_expression() :: json_pair().
+-type json_update_expression() :: json_pair().
+-type json_expression_attribute_names() :: json_pair().
 -type json_key() :: [json_attr(),...].
 
 -type key() :: maybe_list(in_attr()).
@@ -266,6 +283,14 @@ default_config() -> erlcloud_aws:default_config().
 %% Convert terms into the form expected by DynamoDB
 
 -spec dynamize_type(attr_type()) -> binary().
+dynamize_type(bool) ->
+    <<"BOOL">>;
+dynamize_type(null) ->
+    <<"NULL">>;
+dynamize_type(m) ->
+    <<"M">>;
+dynamize_type(l) ->
+    <<"L">>;
 dynamize_type(s) ->
     <<"S">>;
 dynamize_type(n) ->
@@ -281,6 +306,14 @@ dynamize_number(Value) when is_float(Value) ->
     [String] = io_lib:format("~p", [Value]),
     list_to_binary(String).
 
+-spec dynamize_document_type(attr_type(), in_item()) -> [binary()].
+dynamize_document_type(m, Values) when Values == [] ->
+    [{}];
+dynamize_document_type(m, Values) ->
+    dynamize_item(Values);
+dynamize_document_type(l, Values) ->
+    [dynamize_array_value(Value) || Value <- Values].
+
 -spec dynamize_set(attr_type(), in_attr_data_set()) -> [binary()].
 dynamize_set(ss, Values) ->
     [iolist_to_binary(Value) || Value <- Values];
@@ -289,7 +322,15 @@ dynamize_set(ns, Values) ->
 dynamize_set(bs, Values) ->
     [base64:encode(Value) || Value <- Values].
 
+-spec dynamize_array_value(in_attr_value()) -> json_attr_value().
+dynamize_array_value(Value) ->
+    [dynamize_value(Value)].
+
 -spec dynamize_value(in_attr_value()) -> json_attr_value().
+dynamize_value({bool, Value}) ->
+    {<<"BOOL">>, Value};
+dynamize_value({null, Value}) ->
+    {<<"NULL">>, Value};
 dynamize_value({s, Value}) when is_binary(Value) ->
     {<<"S">>, Value};
 dynamize_value({s, Value}) when is_list(Value) ->
@@ -301,6 +342,10 @@ dynamize_value({n, Value}) when is_number(Value) ->
 dynamize_value({b, Value}) when is_binary(Value) orelse is_list(Value) ->
     {<<"B">>, base64:encode(Value)};
 
+dynamize_value({m, Value}) when is_list(Value) ->
+    {<<"M">>, dynamize_document_type(m, Value)};
+dynamize_value({l, Value}) when is_list(Value) ->
+    {<<"L">>, dynamize_document_type(l, Value)};
 dynamize_value({ss, Value}) when is_list(Value) ->
     {<<"SS">>, dynamize_set(ss, Value)};
 dynamize_value({ns, Value}) when is_list(Value) ->
@@ -308,6 +353,12 @@ dynamize_value({ns, Value}) when is_list(Value) ->
 dynamize_value({bs, Value}) when is_list(Value) ->
     {<<"BS">>, dynamize_set(bs, Value)};
 
+dynamize_value(Value) when Value == <<"true">> ->
+    dynamize_value({bool, <<"true">>});
+dynamize_value(Value) when Value == <<"false">> ->
+    dynamize_value({bool, <<"false">>});
+dynamize_value(Value) when Value == <<"NULL">> ->
+    dynamize_value({null, <<"true">>});
 dynamize_value(Value) when is_binary(Value) ->
     dynamize_value({s, Value});
 dynamize_value(Value) when is_list(Value) ->
@@ -372,6 +423,22 @@ dynamize_expected_item(Condition) ->
 -spec dynamize_expected(in_expected()) -> json_expected().
 dynamize_expected(Expected) ->
     dynamize_maybe_list(fun dynamize_expected_item/1, Expected).
+
+-spec dynamize_condition_expression(in_condition_expression()) -> json_condition_expression().
+dynamize_condition_expression(ConditionExpression) ->
+    ConditionExpression.
+
+-spec dynamize_projection_expression(in_projection_expression()) -> json_projection_expression().
+dynamize_projection_expression(ProjectionExpression) ->
+    ProjectionExpression.
+
+-spec dynamize_update_expression(in_update_expression()) -> json_update_expression().
+dynamize_update_expression(UpdateExpression) ->
+    UpdateExpression.
+
+-spec dynamize_expression_attribute_names(in_expression_attribute_names()) -> json_expression_attribute_names().
+dynamize_expression_attribute_names(Names) ->
+    Names.
 
 -spec dynamize_return_value(return_value()) -> binary().
 dynamize_return_value(none) ->
@@ -448,6 +515,14 @@ dynamize_return_item_collection_metrics(size) ->
 id(X, _) -> X.
 
 -spec undynamize_type(json_attr_type(), undynamize_opts()) -> attr_type().
+undynamize_type(<<"NULL">>, _) ->
+    null;
+undynamize_type(<<"BOOL">>, _) ->
+    bool;
+undynamize_type(<<"M">>, _) ->
+    m;
+undynamize_type(<<"L">>, _) ->
+    l;
 undynamize_type(<<"S">>, _) ->
     s;
 undynamize_type(<<"N">>, _) ->
@@ -466,6 +541,12 @@ undynamize_number(Value, _) ->
     end.
             
 -spec undynamize_value(json_attr_value(), undynamize_opts()) -> out_attr_value().
+undynamize_value({<<"M">>, Value}, Opts) ->
+    undynamize_item(Value, Opts);
+undynamize_value({<<"L">>, Value}, Opts) ->
+    undynamize_items([Value], Opts);
+undynamize_value({<<"NULL">>, _Value}, _) ->
+    undefined;
 undynamize_value({<<"S">>, Value}, _) when is_binary(Value) ->
     Value;
 undynamize_value({<<"N">>, Value}, Opts) ->
@@ -483,28 +564,29 @@ undynamize_value({<<"BS">>, Values}, _) ->
 undynamize_attr({Name, [ValueJson]}, Opts) ->
     {Name, undynamize_value(ValueJson, Opts)}.
 
--spec undynamize_object(fun((json_pair(), undynamize_opts()) -> A), 
-                        [json_pair()] | [{}], undynamize_opts()) -> [A].
-undynamize_object(_, [{}], _) ->
-    %% jsx returns [{}] for empty objects
-    [];
-undynamize_object(PairFun, List, Opts) ->
-    [PairFun(I, Opts) || I <- List].
-
 -spec undynamize_item(json_item(), undynamize_opts()) -> out_item().
-undynamize_item(Json, Opts) ->
-    case lists:keyfind(typed, 1, Opts) of
-        {typed, true} ->
-            undynamize_object(fun undynamize_attr_typed/2, Json, Opts);
-        _ ->
-            undynamize_object(fun undynamize_attr/2, Json, Opts)
-    end.
+undynamize_item([{}], _Opts) ->
+    #{};
+undynamize_item([_|_] = List, Opts) ->
+    undynamize_item_internal(List, #{}, Opts).
+undynamize_item_internal([{K,[V]}|R], Output, Opts) ->
+    Output2 = maps:put(K, undynamize_value(V, Opts), Output),
+    undynamize_item_internal(R, Output2, Opts);
+undynamize_item_internal([], Output, _Opts) ->
+    Output.
+
+undynamize_object(_Fun, Json, Opts) ->
+    undynamize_item(Json, Opts).
 
 -spec undynamize_items([json_item()], undynamize_opts()) -> [out_item()].
 undynamize_items(Items, Opts) ->
     [undynamize_item(I, Opts) || I <- Items].
 
 -spec undynamize_value_typed(json_attr_value(), undynamize_opts()) -> in_attr_typed_value().
+undynamize_value_typed({<<"NULL">>, Value}, _) ->
+    {null, Value};
+undynamize_value_typed({<<"BOOL">>, Value}, _) ->
+    {bool, Value};
 undynamize_value_typed({<<"S">>, Value}, _) ->
     {s, Value};
 undynamize_value_typed({<<"N">>, Value}, Opts) ->
@@ -641,6 +723,36 @@ conditional_op_opt() ->
 expected_opt() ->
     {expected, <<"Expected">>, fun dynamize_expected/1}.
 
+-type condition_expression_opt() :: {condition_expression, in_condition_expression()}.
+
+-spec condition_expression_opt() -> opt_table_entry().
+condition_expression_opt() ->
+    {condition_expression, <<"ConditionExpression">>, fun dynamize_condition_expression/1}.
+
+-type projection_expression_opt() :: {projection_expression, in_projection_expression()}.
+
+-spec projection_expression_opt() -> opt_table_entry().
+projection_expression_opt() ->
+    {projection_expression, <<"ProjectionExpression">>, fun dynamize_projection_expression/1}.
+
+-type update_expression_opt() :: {update_expression, in_update_expression()}.
+
+-spec update_expression_opt() -> opt_table_entry().
+update_expression_opt() ->
+    {update_expression, <<"UpdateExpression">>, fun dynamize_update_expression/1}.
+
+-type expression_attribute_names_opt() :: {expression_attribute_names, in_item()}.
+
+-spec expression_attribute_names_opt() -> opt_table_entry().
+expression_attribute_names_opt() ->
+    {expression_attribute_names, <<"ExpressionAttributeNames">>, fun dynamize_expression_attribute_names/1}.
+
+-type expression_attribute_values_opt() :: {expression_attribute_values, in_item()}.
+
+-spec expression_attribute_values_opt() -> opt_table_entry().
+expression_attribute_values_opt() ->
+    {expression_attribute_values, <<"ExpressionAttributeValues">>, fun dynamize_item/1}.
+
 -spec return_consumed_capacity_opt() -> opt_table_entry().
 return_consumed_capacity_opt() ->
     {return_consumed_capacity, <<"ReturnConsumedCapacity">>, fun dynamize_return_consumed_capacity/1}.
@@ -651,6 +763,8 @@ return_item_collection_metrics_opt() ->
      fun dynamize_return_item_collection_metrics/1}.
 
 -type get_item_opt() :: attributes_to_get_opt() | 
+                        expression_attribute_names_opt() |
+                        projection_expression_opt() |
                         consistent_read_opt() |
                         return_consumed_capacity_opt() |
                         out_opt().
@@ -659,6 +773,8 @@ return_item_collection_metrics_opt() ->
 -spec get_item_opts() -> opt_table().
 get_item_opts() ->
     [attributes_to_get_opt(),
+     expression_attribute_names_opt(),
+     projection_expression_opt(),
      consistent_read_opt(),
      return_consumed_capacity_opt()].
 
@@ -1470,7 +1586,11 @@ list_tables(Opts, Config) ->
 %%%------------------------------------------------------------------------------
 
 -type put_item_opt() :: conditional_op_opt() |
-                        expected_opt() | 
+                        condition_expression_opt() | 
+                        expected_opt() |
+                        projection_expression_opt() | 
+                        expression_attribute_names_opt() | 
+                        expression_attribute_values_opt() | 
                         {return_values, none | all_old} |
                         return_consumed_capacity_opt() |
                         return_item_collection_metrics_opt() |
@@ -1480,7 +1600,11 @@ list_tables(Opts, Config) ->
 -spec put_item_opts() -> opt_table().
 put_item_opts() ->
     [conditional_op_opt(),
+     condition_expression_opt(),
      expected_opt(),
+     projection_expression_opt(),
+     expression_attribute_names_opt(),
+     expression_attribute_values_opt(),
      {return_values, <<"ReturnValues">>, fun dynamize_return_value/1},
      return_consumed_capacity_opt(),
      return_item_collection_metrics_opt()].
@@ -1493,7 +1617,6 @@ put_item_record() ->
       {<<"ItemCollectionMetrics">>, #ddb2_put_item.item_collection_metrics, 
        fun undynamize_item_collection_metrics/2}
      ]}.
-
 -type put_item_return() :: ddb_return(#ddb2_put_item{}, out_item()).
 
 -spec put_item(table_name(), in_item()) -> put_item_return().
@@ -1776,6 +1899,10 @@ dynamize_updates(Updates) ->
     dynamize_maybe_list(fun dynamize_update/1, Updates).
 
 -type update_item_opt() :: conditional_op_opt() |
+                           condition_expression_opt() | 
+                           update_expression_opt() |
+                           expression_attribute_names_opt() | 
+                           expression_attribute_values_opt() | 
                            expected_opt() | 
                            return_consumed_capacity_opt() |
                            return_item_collection_metrics_opt() |
@@ -1786,6 +1913,10 @@ dynamize_updates(Updates) ->
 -spec update_item_opts() -> opt_table().
 update_item_opts() ->
     [conditional_op_opt(),
+     condition_expression_opt(),
+     update_expression_opt(),
+     expression_attribute_names_opt(),
+     expression_attribute_values_opt(),
      expected_opt(),
      return_consumed_capacity_opt(),
      return_item_collection_metrics_opt(),
