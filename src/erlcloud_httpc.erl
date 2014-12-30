@@ -12,4 +12,19 @@
 -export([request/6]).
 
 request(URL, Method, Hdrs, Body, Timeout, _Config) ->
-    lhttpc:request(URL, Method, Hdrs, Body, Timeout, []).
+	Options = [{connect_timeout, Timeout}, {recv_timeout, infinity}],
+
+	case hackney:request(Method, URL, Hdrs, Body, Options) of
+		{ok, StatusCode, _RespHeaders, ClientRef} ->
+			Temp = hackney:body(ClientRef),
+			erlang:display(Temp),
+			case Temp of
+				{ok, ResultBody} ->
+					erlang:display(binary_to_list(ResultBody)), 
+					{ok, {{StatusCode, undefined}, undefined, ResultBody}};
+				{error, Reason} ->
+					{error, Reason}
+			end;
+		{error, Reason} ->
+			{error, Reason}
+	end.
