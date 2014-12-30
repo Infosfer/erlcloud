@@ -9,3 +9,4 @@ rebar
 deps/
 doc/
 .edts
+.DS_Store
