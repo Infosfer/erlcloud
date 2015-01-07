@@ -1,4 +1,5 @@
 -record(aws_config, {
+          connection_pool=default::atom(),
           as_host="autoscaling.amazonaws.com"::string(),
           ec2_host="ec2.amazonaws.com"::string(),
           iam_host="iam.amazonaws.com"::string(),
