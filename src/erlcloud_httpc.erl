@@ -11,8 +11,14 @@
 
 -export([request/6]).
 
-request(URL, Method, Hdrs, Body, Timeout, _Config) ->
-	Options = [{connect_timeout, Timeout}, {recv_timeout, infinity}],
+-include("erlcloud_aws.hrl").
+
+request(URL, Method, Hdrs, Body, Timeout, Config) ->
+	Options = [
+		{connect_timeout, Timeout}, 
+		{recv_timeout, infinity},
+		{pool, Config#aws_config.connection_pool}
+	],
 
 	case hackney:request(Method, URL, Hdrs, Body, Options) of
 		{ok, StatusCode, _RespHeaders, ClientRef} ->
